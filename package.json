@@ -1,0 +1,9 @@
+{
+  "name": "request-intelligence-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"dev": "vite --host 127.0.0.1", "build": "vite build", "test": "node --test tests/evidence.test.mjs"},
+  "dependencies": {"react": "19.0.0", "react-dom": "19.0.0"},
+  "devDependencies": {"vite": "6.4.3"}
+}
