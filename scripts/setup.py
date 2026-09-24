@@ -1,31 +1,58 @@
 """One-time bootstrap. Model downloads are explicit; existing .env is never overwritten."""
 import argparse
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 from runtime import ROOT, Processes, config, ensure_ollama, python, request
 
 def run(args, env):
-    subprocess.run([str(a) for a in args], cwd=ROOT, env=env, check=True)
+    command = [str(a) for a in args]
+    executable = shutil.which(command[0], path=env.get('PATH'))
+    if not executable:
+        raise RuntimeError(f'Cannot find executable: {command[0]}. Install it or fix PATH in the terminal running setup.')
+    command[0] = executable
+    try:
+        subprocess.run(command, cwd=ROOT, env=env, check=True)
+    except FileNotFoundError as error:
+        # Do not print the entire command or environment: either can contain private configuration.
+        raise RuntimeError(f'Could not start {command[0]}. Check its interpreter and that the project directory exists.') from error
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f'{Path(command[0]).name} exited with code {error.returncode}; see its output above.') from error
+
+def prerequisites(env):
+    required = ['node', 'npm'] + (['git'] if env['JEV_MODE'] == 'local' else [])
+    missing = [name for name in required if not shutil.which(name, path=env.get('PATH'))]
+    if missing:
+        raise RuntimeError('Missing prerequisite(s) on PATH: ' + ', '.join(missing) +
+                           '. Install Node.js (includes npm) and Git as needed, then reopen your terminal.')
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--skip-downloads', action='store_true', help='Install dependencies/build only; no model downloads or Ollama startup')
+    parser.add_argument('--check', action='store_true', help='Check prerequisites only; no installs, downloads, or services')
     args = parser.parse_args()
     if sys.version_info < (3, 12):
         raise RuntimeError('Use Python 3.12 or newer')
     env = config()
+    prerequisites(env)
+    if args.check:
+        print('Configuration, Python version, Node/npm and required Git are available. No changes made.')
+        return
     owned = Processes()
     try:
         targets = [('.venv', 'requirements.txt')]
         if env['JEV_MODE'] == 'local':
             targets.append(('.venv-jev', 'requirements-jev.txt'))
         for name, requirements in targets:
+            print(f'Preparing {name} using {requirements}…', flush=True)
             executable = python(ROOT, name)
             if not executable.exists():
                 run([sys.executable, '-m', 'venv', ROOT/name], env)
             run([executable, '-m', 'pip', 'install', '-r', requirements], env)
+        print('Installing dashboard dependencies…', flush=True)
         run(['npm', 'ci'], env)
+        print('Building dashboard…', flush=True)
         run(['npm', 'run', 'build'], env)
         if not args.skip_downloads:
             run([python(ROOT), '-c', 'import os; from backend.app import private_endpoint; [private_endpoint(os.environ[k]) for k in ["JEV_URL","EXTRACTION_URL"]]'], env)
@@ -54,6 +81,9 @@ if __name__ == '__main__':
         print('Setup interrupted.', file=sys.stderr)
         sys.exit(130)
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
-        detail = str(error) if isinstance(error, (RuntimeError, ValueError)) else type(error).__name__
+        if isinstance(error, FileNotFoundError):
+            detail = f'Missing file or executable: {error.filename or "unknown"}'
+        else:
+            detail = str(error) if isinstance(error, (RuntimeError, ValueError)) else type(error).__name__
         print(f'Setup failed: {detail}. Check prerequisites, model paths, and service configuration.', file=sys.stderr)
         sys.exit(1)

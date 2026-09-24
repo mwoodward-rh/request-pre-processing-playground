@@ -69,6 +69,7 @@ def test_setup_skip_downloads(monkeypatch,tmp_path):
     spec.loader.exec_module(setup)
     env = runtime.config(tmp_path, {'JEV_MODE':'external'})
     monkeypatch.setattr(setup,'config',lambda:env)
+    monkeypatch.setattr(setup,'prerequisites',lambda env:None)
     monkeypatch.setattr(setup,'ROOT',tmp_path)
     monkeypatch.setattr(sys,'argv',['setup.py','--skip-downloads'])
     commands=[]
@@ -78,3 +79,13 @@ def test_setup_skip_downloads(monkeypatch,tmp_path):
     setup.main()
     assert ['npm','ci'] in commands and ['npm','run','build'] in commands
     assert not any('.venv-jev' in ' '.join(command) for command in commands)
+
+def test_setup_reports_missing_executable(monkeypatch):
+    spec = importlib.util.spec_from_file_location('lab_setup_errors', SCRIPTS/'setup.py')
+    setup = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(setup)
+    monkeypatch.setattr(setup.shutil, 'which', lambda *a, **k: None)
+    with pytest.raises(RuntimeError, match='Cannot find executable: npm'):
+        setup.run(['npm','ci'], {})
+    with pytest.raises(RuntimeError, match='node, npm, git'):
+        setup.prerequisites({'JEV_MODE':'local'})
