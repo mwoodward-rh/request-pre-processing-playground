@@ -29,7 +29,7 @@ def prerequisites(env):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--skip-downloads', action='store_true', help='Install dependencies/build only; no model downloads or Ollama startup')
+    parser.add_argument('--skip-downloads', action='store_true', help='Install dependencies/build only; no model downloads or local services')
     parser.add_argument('--check', action='store_true', help='Check prerequisites only; no installs, downloads, or services')
     args = parser.parse_args()
     if sys.version_info < (3, 12):
@@ -55,7 +55,7 @@ def main():
         print('Building dashboard…', flush=True)
         run(['npm', 'run', 'build'], env)
         if not args.skip_downloads:
-            run([python(ROOT), '-c', 'import os; from backend.app import private_endpoint; [private_endpoint(os.environ[k]) for k in ["JEV_URL","EXTRACTION_URL"]]'], env)
+            run([python(ROOT), '-c', 'import os; from backend.app import private_endpoint, extraction_endpoint; private_endpoint(os.environ["JEV_URL"]); extraction_endpoint()'], env)
             if env['JEV_MODE'] == 'local':
                 print('Downloading/caching the configured Jev model (may be several GB)…', flush=True)
                 run([python(ROOT, '.venv-jev'), '-c',
@@ -63,13 +63,13 @@ def main():
                      env['JEV_MODEL'], env['JEV_MODEL_PATH']], env)
             if not Path(env['JEV_TOKENIZER']).is_file():
                 raise RuntimeError('JEV_TOKENIZER is missing. Set it to the matching tokenizer.json, including in external mode.')
-            ensure_ollama(env, owned)
-            print('Downloading/caching the configured Ollama model; this may take several minutes…', flush=True)
-            # Ollama supports a non-streaming pull; any returned provider error is kept out of logs.
-            result = request(env['EXTRACTION_URL'].rstrip('/') + '/api/pull',
-                             {'model': env['EXTRACTION_MODEL'], 'stream': False}, timeout=3600)
-            if result.get('status') != 'success':
-                raise RuntimeError('Ollama model pull failed')
+            if env['EXTRACTION_PROVIDER'] == 'ollama':
+                ensure_ollama(env, owned)
+                print('Downloading/caching the configured Ollama model; this may take several minutes…', flush=True)
+                result = request(env['EXTRACTION_URL'].rstrip('/') + '/api/pull',
+                                 {'model': env['EXTRACTION_MODEL'], 'stream': False}, timeout=3600)
+                if result.get('status') != 'success':
+                    raise RuntimeError('Ollama model pull failed')
         print('Setup complete. Start with: python3.12 scripts/launch.py', flush=True)
     finally:
         owned.close()

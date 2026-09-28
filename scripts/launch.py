@@ -5,7 +5,7 @@ import signal
 import sys
 import time
 from urllib.parse import urlsplit
-from runtime import ROOT, Processes, check_ollama, config, ensure_ollama, free_port, python, request, wait_ready
+from runtime import ROOT, Processes, check_foundry, check_ollama, config, ensure_ollama, free_port, python, request, wait_ready
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -20,16 +20,25 @@ def main():
         raise RuntimeError('Local Jev is not installed; run setup first')
     # Use the same endpoint policy as the API, without requiring dependencies in this launcher.
     import subprocess
-    subprocess.run([str(python(ROOT)), '-c',
-        'import os; from backend.app import private_endpoint; [private_endpoint(os.environ[k]) for k in ["JEV_URL","EXTRACTION_URL"]]'],
-        cwd=ROOT, env=env, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    validation = subprocess.run([str(python(ROOT)), '-c',
+        'import os; from backend.app import private_endpoint, extraction_endpoint; private_endpoint(os.environ["JEV_URL"]); extraction_endpoint()'],
+        cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if validation.returncode:
+        if env['EXTRACTION_PROVIDER'] == 'openai':
+            raise RuntimeError('OpenAI-compatible configuration is invalid; check OPENAI_BASE_URL, EXTRACTION_MODEL, OPENAI_API_KEY, and JEV_URL')
+        if env['EXTRACTION_PROVIDER'] == 'foundry':
+            raise RuntimeError('Foundry configuration or Azure CLI authentication is unavailable; check FOUNDRY_ENDPOINT and JEV_URL')
+        raise RuntimeError('Configured local/private model endpoint is unavailable; check JEV_URL and EXTRACTION_URL')
 
     def jev_ready():
         if request(env['JEV_URL'].rstrip('/') + '/healthz').get('ok') is not True:
             raise RuntimeError('Jev is not ready')
 
     if args.check:
-        check_ollama(env)
+        if env['EXTRACTION_PROVIDER'] == 'foundry':
+            check_foundry(env)
+        elif env['EXTRACTION_PROVIDER'] == 'ollama':
+            check_ollama(env)
         jev_ready()
         print('Configuration and existing model endpoints are ready. No inference performed; no processes started.')
         return
@@ -37,8 +46,11 @@ def main():
     free_port(port)
     owned = Processes()
     try:
-        ensure_ollama(env, owned)
-        check_ollama(env)
+        if env['EXTRACTION_PROVIDER'] == 'foundry':
+            check_foundry(env)
+        elif env['EXTRACTION_PROVIDER'] == 'ollama':
+            ensure_ollama(env, owned)
+            check_ollama(env)
         if env['JEV_MODE'] == 'local':
             jev_port = urlsplit(env['JEV_URL']).port
             free_port(jev_port)  # An existing service must be selected explicitly via external mode.
