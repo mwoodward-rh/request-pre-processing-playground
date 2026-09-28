@@ -14,7 +14,7 @@ DEFAULTS = {
     'JEV_MODEL': 'com-kotobalabs/open-jev-deberta-v3-large',
     'JEV_MODEL_PATH': 'models/open-jev', 'JEV_TOKENIZER': 'models/open-jev/tokenizer.json',
     'JEV_DEVICE': 'cpu', 'EXTRACTION_URL': 'http://127.0.0.1:11434',
-    'EXTRACTION_MODEL': 'gpt-4o-mini', 'LAB_PORT': '8030', 'OLLAMA_AUTOSTART': '1',
+    'EXTRACTION_MODEL': 'gpt-6-luna', 'LAB_PORT': '8030', 'OLLAMA_AUTOSTART': '1',
     'EXTRACTION_PROVIDER': 'openai', 'OPENAI_BASE_URL': 'https://api.openai.com/v1',
     'OPENAI_API_KEY': '', 'FOUNDRY_ENDPOINT': '',
     'FOUNDRY_API_VERSION': '2025-11-15-preview',

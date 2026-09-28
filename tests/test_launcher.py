@@ -16,6 +16,7 @@ def test_defaults_and_cpu(tmp_path):
     assert env['JEV_DEVICE'] == 'cpu' and env['JEV_MODE'] == 'local'
     assert env['JEV_TOKENIZER'] == str(tmp_path/'models/open-jev/tokenizer.json')
     assert env['EXTRACTION_PROVIDER'] == 'openai'
+    assert env['EXTRACTION_MODEL'] == 'gpt-6-luna'
     assert env['OPENAI_BASE_URL'] == 'https://api.openai.com/v1'
 
 def test_env_precedence_and_no_shell_evaluation(tmp_path):

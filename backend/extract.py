@@ -10,7 +10,7 @@ from backend.core import grounded_spans
 def extract(text):
     import langextract as lx
     from langextract.factory import ModelConfig
-    model = os.environ.get('EXTRACTION_MODEL', 'gpt-4o-mini')
+    model = os.environ.get('EXTRACTION_MODEL', 'gpt-6-luna')
     provider = os.environ.get('EXTRACTION_PROVIDER', 'openai')
     if provider == 'foundry':
         from backend.foundry import configured_model

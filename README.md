@@ -2,7 +2,7 @@
 
 A small demonstration of **OpenJev classification + LangExtract semantic extraction**, with a React dashboard. Classification uses a local/private OpenJev service. Extraction uses a server-configured, OpenAI-compatible Chat Completions endpoint by default; adopters bring their own endpoint, model name, and API key. Optional Ollama and Azure Foundry adapters remain available. Enter a request and optional explicit context; inspect intent scores, exact source highlights, semantic attributes, a mention graph, and real model timings.
 
-No Guardian dependency. No database, memory retrieval, persistent chat history, calibration, automatic routing, tool execution, or generated answer. No synthetic inference fallback. Unavailable stages are reported independently.
+No database, memory retrieval, persistent chat history, calibration, automatic routing, tool execution, or generated answer. No synthetic inference fallback. Unavailable stages are reported independently.
 
 ## Architecture
 
@@ -87,7 +87,7 @@ FOUNDRY_API_VERSION=2025-11-15-preview
 
 The endpoint is an **agent Responses endpoint**, not a Chat Completions base URL. Omit its query string; the API version is configured separately. `EXTRACTION_MODEL` labels the agent in results; it does not change the model deployed behind that agent. The agent's existing instructions can affect extraction quality. A dedicated extraction agent without tools is preferable to a general-purpose agent.
 
-Install Azure CLI and sign in to an account authorized for the project. Authentication obtains an Azure CLI token for `https://ai.azure.com`; no key or token belongs in `.env` or frontend code. On Windows the adapter uses Azure CLI's bundled Python and, if present, the existing `%LOCALAPPDATA%/FoundryDiagnostics/pywin32-py313` DLL repair used by the companion Foundry client. Other systems use `az` on PATH. Authentication failures require fixing the CLI installation/login, not disabling certificate validation.
+Install Azure CLI and sign in to an account authorized for the project. Authentication obtains an Azure CLI token for `https://ai.azure.com`; no key or token belongs in `.env` or frontend code. On Windows the adapter uses Azure CLI's bundled Python; other systems use `az` on PATH. Authentication failures require fixing the CLI installation/login, not disabling certificate validation.
 
 Foundry mode validates Azure CLI authentication and requires no local extraction model. Jev still runs locally by default. `launch.py --check` validates configuration and Azure authentication, but does not submit inference or prove permission to invoke the agent.
 
@@ -137,7 +137,7 @@ In another:
 npm run dev
 ```
 
-Open **http://127.0.0.1:5186**. The Vite proxy talks only to the standalone API, not Guardian. The manual uvicorn commands do not load `.env`; export variables or use the launcher above. Never put service credentials in `VITE_` variables. Avoid typing real credentials into shell history; prefer the ignored local `.env` file or your process manager's secret configuration.
+Open **http://127.0.0.1:5186**. The Vite proxy talks only to the standalone API. The manual uvicorn commands do not load `.env`; export variables or use the launcher above. Never put service credentials in `VITE_` variables. Avoid typing real credentials into shell history; prefer the ignored local `.env` file or your process manager's secret configuration.
 
 Alternatively, `npm run build`, then start/restart the Python API; it serves `dist/` at **http://127.0.0.1:8030**. This single-origin built mode does not require the Vite dev server.
 
@@ -171,13 +171,9 @@ gitleaks dir . --redact
 
 Tests exercise real HTTP validation with mocked inference, partial failures, error privacy, concurrency, Unicode span grounding, and score aggregation. Model-quality evaluation is separate. A live smoke run should use a synthetic prompt and require both stages complete; inspect returned model IDs and actual spans.
 
-Development acceptance (2026-09-24): the built dashboard and standalone Python API completed a browser-submitted synthetic request against existing local OpenJev and Gemma services. Jev took 761 ms; LangExtract took 25,431 ms and returned two grounded spans with one rejected span. A different request returned no spans, so empty extraction is surfaced explicitly. These are individual observations, not benchmarks or quality guarantees. The optional bundled Jev adapter has contract tests and dependency-resolution checks; a fresh model download/start is not part of this acceptance run.
-
-Launcher acceptance: external-endpoint readiness checks passed, the launcher served API and dashboard HTTP 200 on a separate loopback port, and Ctrl+C stopped the owned API process. Existing model services remained available. Setup's external-mode `--skip-downloads` path completed. Configuration precedence, invalid values, model-presence checks, process ownership, custom-port origin checks, and no-download setup behavior are covered by tests. Fresh multi-GB downloads, local Jev model loading, and automatic startup of a previously stopped Ollama have not been exercised in this acceptance run.
-
 ## Sharing and attribution
 
-This directory is intended to become a fresh standalone repository. Do **not** publish its parent workspace or private Git history. Exclude ignored environments, model files, screenshots, and any local artifacts. Select a project license before public release; none is presumed here. No repository has been created or published by setup.
+This directory is intended to become a fresh standalone repository. Share only this project's source, not unrelated development files or history. Exclude ignored environments, model files, screenshots, and local artifacts. Select a project license before public release; none is presumed here. No repository has been created or published by setup.
 
 Run `.venv/bin/python scripts/package.py` to produce `artifacts/request-intelligence-lab-source.zip` from an explicit source-file allowlist. This intentionally excludes the parent workspace, runtime configuration, virtual environments, dependencies, and model weights. Choose the application license before public release and add it to the packaging allowlist.
 
@@ -186,4 +182,4 @@ Run `.venv/bin/python scripts/package.py` to produce `artifacts/request-intellig
 - [LangExtract](https://github.com/google/langextract): Apache-2.0; installed separately.
 - React (MIT), Vite (MIT), FastAPI (MIT), Uvicorn (BSD-3-Clause), and their dependencies retain their respective licenses. Model licenses are separate from this application; verify the selected extraction model's terms before redistribution.
 
-No private prompts, labels, databases, model weights, or infrastructure configuration are included in the example source.
+No prompts, labels, databases, model weights, or deployment-specific configuration are included in the example source.
