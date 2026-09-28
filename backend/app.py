@@ -90,8 +90,21 @@ async def classify(body):
             'tokens': tokens, 'chunks': len(parts), 'context_tokens_used': min(len(offsets), 70),
             'context_truncated': len(offsets) > 70, 'aggregation': 'mean chunk distributions; maximum reference/task flags'}
 
+def extraction_endpoint():
+    provider = os.environ.get('EXTRACTION_PROVIDER', 'openai')
+    if provider == 'foundry':
+        from backend.foundry import validate_endpoint
+        validate_endpoint(os.environ.get('FOUNDRY_ENDPOINT', ''))
+    elif provider == 'openai':
+        from backend.openai_endpoint import validate_config
+        validate_config(os.environ)
+    elif provider == 'ollama':
+        private_endpoint(os.environ.get('EXTRACTION_URL', 'http://127.0.0.1:11434'))
+    else:
+        raise ValueError('Unsupported extraction provider')
+
 async def extraction(text):
-    await asyncio.to_thread(private_endpoint, os.environ.get('EXTRACTION_URL', 'http://127.0.0.1:11434'))
+    await asyncio.to_thread(extraction_endpoint)
     process = await asyncio.create_subprocess_exec(sys.executable, '-m', 'backend.extract', cwd=ROOT,
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
     try:
@@ -115,7 +128,10 @@ async def stage(fn):
 
 @app.get('/api/health')
 def health():
+    provider = os.environ.get('EXTRACTION_PROVIDER', 'openai')
     return {'ok': True, 'mode': 'passive', 'persistence': False, 'pii_redaction': False,
+            'extraction_provider': provider,
+            'remote_extraction': provider in {'openai', 'foundry'},
             'note': 'API health only; model availability is verified by analysis.'}
 
 @app.post('/api/analyze')

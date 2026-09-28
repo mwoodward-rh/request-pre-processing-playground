@@ -15,6 +15,9 @@ def test_defaults_and_cpu(tmp_path):
     env = runtime.config(tmp_path, {})
     assert env['JEV_DEVICE'] == 'cpu' and env['JEV_MODE'] == 'local'
     assert env['JEV_TOKENIZER'] == str(tmp_path/'models/open-jev/tokenizer.json')
+    assert env['EXTRACTION_PROVIDER'] == 'openai'
+    assert env['EXTRACTION_MODEL'] == 'gpt-6-luna'
+    assert env['OPENAI_BASE_URL'] == 'https://api.openai.com/v1'
 
 def test_env_precedence_and_no_shell_evaluation(tmp_path):
     (tmp_path/'.env').write_text('EXTRACTION_MODEL="file-model"\nJEV_MODEL_PATH=custom\n')
@@ -34,6 +37,53 @@ def test_reject_bad_config(tmp_path,line):
 def test_explicit_external_service(tmp_path):
     env = runtime.config(tmp_path, {'JEV_MODE':'external', 'JEV_URL':'http://10.0.0.2:8022'})
     assert env['JEV_MODE']=='external'
+
+def test_foundry_configuration(tmp_path):
+    with pytest.raises(ValueError, match='FOUNDRY_ENDPOINT'):
+        runtime.config(tmp_path, {'EXTRACTION_PROVIDER': 'foundry'})
+    with pytest.raises(ValueError, match='EXTRACTION_PROVIDER'):
+        runtime.config(tmp_path, {'EXTRACTION_PROVIDER': 'unknown'})
+    env = runtime.config(tmp_path, {'EXTRACTION_PROVIDER': 'foundry', 'FOUNDRY_ENDPOINT': 'configured'})
+    assert env['EXTRACTION_PROVIDER'] == 'foundry'
+
+def test_openai_configuration(tmp_path):
+    env = runtime.config(tmp_path, {'EXTRACTION_PROVIDER': 'openai', 'OPENAI_BASE_URL': 'https://example.com/v1',
+                                    'OPENAI_API_KEY': 'test-key', 'EXTRACTION_MODEL': 'model-name'})
+    assert env['OPENAI_BASE_URL'] == 'https://example.com/v1'
+    assert env['OPENAI_API_KEY'] == 'test-key'
+
+def test_openai_setup_does_not_use_ollama(monkeypatch, tmp_path):
+    spec = importlib.util.spec_from_file_location('openai_setup', SCRIPTS/'setup.py')
+    setup = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(setup)
+    tokenizer = tmp_path / 'tokenizer.json'
+    tokenizer.write_text('{}')
+    env = runtime.config(tmp_path, {'JEV_MODE': 'external', 'EXTRACTION_PROVIDER': 'openai',
+        'OPENAI_BASE_URL': 'https://example.com/v1', 'OPENAI_API_KEY': 'test-key',
+        'EXTRACTION_MODEL': 'model-name', 'JEV_TOKENIZER': str(tokenizer)})
+    monkeypatch.setattr(setup, 'config', lambda: env)
+    monkeypatch.setattr(setup, 'prerequisites', lambda env: None)
+    monkeypatch.setattr(setup, 'run', lambda *args: None)
+    monkeypatch.setattr(setup, 'ensure_ollama', lambda *args: pytest.fail('Must not start Ollama'))
+    monkeypatch.setattr(setup, 'request', lambda *args, **kwargs: pytest.fail('Must not pull a model'))
+    monkeypatch.setattr(sys, 'argv', ['setup.py'])
+    setup.main()
+
+def test_foundry_setup_does_not_use_ollama(monkeypatch, tmp_path):
+    spec = importlib.util.spec_from_file_location('foundry_setup', SCRIPTS/'setup.py')
+    setup = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(setup)
+    tokenizer = tmp_path / 'tokenizer.json'
+    tokenizer.write_text('{}')
+    env = runtime.config(tmp_path, {'JEV_MODE': 'external', 'EXTRACTION_PROVIDER': 'foundry',
+                                   'FOUNDRY_ENDPOINT': 'configured', 'JEV_TOKENIZER': str(tokenizer)})
+    monkeypatch.setattr(setup, 'config', lambda: env)
+    monkeypatch.setattr(setup, 'prerequisites', lambda env: None)
+    monkeypatch.setattr(setup, 'run', lambda *args: None)
+    monkeypatch.setattr(setup, 'ensure_ollama', lambda *args: pytest.fail('Must not start Ollama'))
+    monkeypatch.setattr(setup, 'request', lambda *args, **kwargs: pytest.fail('Must not pull a model'))
+    monkeypatch.setattr(sys, 'argv', ['setup.py'])
+    setup.main()
 
 def test_existing_ollama_not_started(monkeypatch):
     monkeypatch.setattr(runtime,'request',lambda *a,**kw: {'models':[]})

@@ -14,7 +14,10 @@ DEFAULTS = {
     'JEV_MODEL': 'com-kotobalabs/open-jev-deberta-v3-large',
     'JEV_MODEL_PATH': 'models/open-jev', 'JEV_TOKENIZER': 'models/open-jev/tokenizer.json',
     'JEV_DEVICE': 'cpu', 'EXTRACTION_URL': 'http://127.0.0.1:11434',
-    'EXTRACTION_MODEL': 'gemma4:e4b', 'LAB_PORT': '8030', 'OLLAMA_AUTOSTART': '1',
+    'EXTRACTION_MODEL': 'gpt-6-luna', 'LAB_PORT': '8030', 'OLLAMA_AUTOSTART': '1',
+    'EXTRACTION_PROVIDER': 'openai', 'OPENAI_BASE_URL': 'https://api.openai.com/v1',
+    'OPENAI_API_KEY': '', 'FOUNDRY_ENDPOINT': '',
+    'FOUNDRY_API_VERSION': '2025-11-15-preview',
 }
 
 def config(root=ROOT, environ=None):
@@ -45,6 +48,10 @@ def config(root=ROOT, environ=None):
         values['JEV_TOKENIZER'] = str(Path(values['JEV_MODEL_PATH']) / 'tokenizer.json')
     if values['JEV_MODE'] not in {'local', 'external'}:
         raise ValueError('JEV_MODE must be local or external')
+    if values['EXTRACTION_PROVIDER'] not in {'openai', 'ollama', 'foundry'}:
+        raise ValueError('EXTRACTION_PROVIDER must be openai, ollama or foundry')
+    if values['EXTRACTION_PROVIDER'] == 'foundry' and not values['FOUNDRY_ENDPOINT']:
+        raise ValueError('FOUNDRY_ENDPOINT is required for Foundry extraction')
     if values['OLLAMA_AUTOSTART'] not in {'0', '1'}:
         raise ValueError('OLLAMA_AUTOSTART must be 0 or 1')
     port = int(values['LAB_PORT'])
@@ -86,6 +93,13 @@ def check_ollama(env):
 def free_port(port):
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', port))
+
+def check_foundry(env):
+    result = subprocess.run([str(python(ROOT)), '-c',
+        'from backend.foundry import configured_model; configured_model().credential.get_token("https://ai.azure.com/.default")'],
+        cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if result.returncode:
+        raise RuntimeError('Foundry configuration or Azure CLI authentication unavailable; check endpoint and login')
 
 class Processes:
     def __init__(self):

@@ -11,10 +11,35 @@ def test_health_and_origin():
     assert client.post('/api/analyze', json={'text':'hello'}, headers={'Origin':'https://evil.example'}).status_code == 403
     assert client.post('/api/analyze', content='text').status_code == 415
 
+def test_openai_endpoint_policy_and_disclosure(monkeypatch):
+    import pytest
+    monkeypatch.setenv('EXTRACTION_PROVIDER', 'openai')
+    monkeypatch.setenv('OPENAI_BASE_URL', 'https://example.com/v1')
+    monkeypatch.setenv('EXTRACTION_MODEL', 'chosen-model')
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+    api.extraction_endpoint()
+    health = client.get('/api/health').json()
+    assert health['extraction_provider'] == 'openai' and health['remote_extraction'] is True
+    monkeypatch.setenv('OPENAI_BASE_URL', 'http://example.com/v1')
+    with pytest.raises(ValueError):
+        api.extraction_endpoint()
+
 def test_input_limits():
     for body in [{'text':'  '}, {'text':'x'*12001}, {'text':'x','context':'y'*6001}, {'text':'x','extra':True}]:
         assert client.post('/api/analyze', json=body).status_code == 422
     assert client.post('/api/analyze',content=b'x'*100001,headers={'Content-Type':'application/json'}).status_code == 413
+
+def test_foundry_endpoint_policy_and_disclosure(monkeypatch):
+    import pytest
+    monkeypatch.setenv('EXTRACTION_PROVIDER', 'foundry')
+    monkeypatch.setenv('FOUNDRY_ENDPOINT', 'https://example.services.ai.azure.com/api/projects/demo/agents/extractor/endpoint/protocols/openai/responses')
+    api.extraction_endpoint()
+    assert client.get('/api/health').json()['remote_extraction'] is True
+    monkeypatch.setenv('FOUNDRY_ENDPOINT', 'https://example.com/responses')
+    with pytest.raises(ValueError):
+        api.extraction_endpoint()
+    with pytest.raises(ValueError):
+        api.private_endpoint('https://8.8.8.8')
 
 def test_partial_and_no_error_payload_leak(monkeypatch):
     async def good(body): return {'label':'explain'}
