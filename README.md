@@ -28,6 +28,22 @@ React dashboard → POST /api/analyze → Python FastAPI
 
 The model stages run concurrently. The API returns when both settle; the UI shows processing meanwhile. Results live in the current browser page only. Reloading clears them. No cross-request context is accumulated: prior context must be explicitly supplied.
 
+### Screenshots
+
+The dashboard shows each stage's output separately so decisions, extracted evidence, and execution details can be inspected independently.
+
+**Request input and OpenJev decisions**
+
+![Request input and OpenJev intent classification](assets/screenshot-1.png)
+
+**Source-grounded extraction and context-reference signals**
+
+![Grounded extraction spans, context-reference scores, and request graph](assets/screenshot-2.png)
+
+**Processing trace**
+
+![OpenJev and LangExtract processing stages and timings](assets/screenshot-3.png)
+
 ## Use Only What You Need
 
 You do not need to install or run the dashboard to use a single component. These snippets assume the relevant service is running and credentials/configuration are supplied by your application, not embedded in source.
@@ -267,7 +283,7 @@ Tests exercise real HTTP validation with mocked inference, partial failures, err
 
 ## Further Reading, Attribution, and Licensing
 
-This directory is intended to become a fresh standalone repository. Share only this project's source, not unrelated development files or history. Exclude ignored environments, model files, screenshots, and local artifacts. Select a project license before public release; none is presumed here. No repository has been created or published by setup.
+This directory is intended to become a fresh standalone repository. Share only this project's source, README-linked assets, and relevant documentation, not unrelated development files or history. Exclude ignored environments, model files, private or unrelated screenshots, and local artifacts. Select a project license before public release; none is presumed here. No repository has been created or published by setup.
 
 Run `.venv/bin/python scripts/package.py` to produce `artifacts/request-intelligence-lab-source.zip` from an explicit source-file allowlist. This intentionally excludes the parent workspace, runtime configuration, virtual environments, dependencies, and model weights. Choose the application license before public release and add it to the packaging allowlist.
 
