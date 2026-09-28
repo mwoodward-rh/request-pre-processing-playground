@@ -1,10 +1,23 @@
 # Request Intelligence Lab
 
-A small demonstration of **OpenJev classification + LangExtract semantic extraction**, with a React dashboard. Classification uses a local/private OpenJev service. Extraction uses a server-configured, OpenAI-compatible Chat Completions endpoint by default; adopters bring their own endpoint, model name, and API key. Optional Ollama and Azure Foundry adapters remain available. Enter a request and optional explicit context; inspect intent scores, exact source highlights, semantic attributes, a mention graph, and real model timings.
+A demonstration of independent LLM request pre-processing techniques. Its central example pairs **OpenJev**, a fast decision model for fixed structured classifications, with **LangExtract**, a generative model workflow for extracting source-grounded spans. A React dashboard makes both outputs inspectable, but you can use either component on its own.
 
 No database, memory retrieval, persistent chat history, calibration, automatic routing, tool execution, or generated answer. No synthetic inference fallback. Unavailable stages are reported independently.
 
-## Architecture
+## What Is This?
+
+This is a reference implementation, not a framework you have to adopt wholesale. The interesting idea is that not every LLM task needs a generative model: a decision model can return a structured choice and scores quickly for a bounded task such as intent classification. Use it when its fixed decision contract fits; use a generative model such as LangExtract when the task needs flexible, source-grounded extraction.
+
+| Component | Use it when you need | Main entry point |
+| --- | --- | --- |
+| OpenJev decision model | Fast classification against its supported decision questions | `POST /v1/systemone` in `backend/jev_server.py` |
+| LangExtract | Flexible structured extraction with spans aligned to input text | `lx.extract()`; this demo's prompt is in `backend/extract.py` |
+| Span validation and score helpers | Exact source checks, UTF-16 offsets, chunking, or score aggregation | `backend/core.py` |
+| Browser highlighting | Render only valid source-aligned spans | `segments()` in `src/evidence.mjs` |
+
+## How Does It Work?
+
+In the full demo, one request goes to two independent stages concurrently. OpenJev returns fixed decision scores; LangExtract asks a configured generative model for semantic spans. The API checks extraction offsets against the original source before the dashboard highlights them. Neither stage answers the user, executes instructions, or remembers requests.
 
 ```text
 React dashboard → POST /api/analyze → Python FastAPI
@@ -14,6 +27,87 @@ React dashboard → POST /api/analyze → Python FastAPI
 ```
 
 The model stages run concurrently. The API returns when both settle; the UI shows processing meanwhile. Results live in the current browser page only. Reloading clears them. No cross-request context is accumulated: prior context must be explicitly supplied.
+
+## Use Only What You Need
+
+You do not need to install or run the dashboard to use a single component. These snippets assume the relevant service is running and credentials/configuration are supplied by your application, not embedded in source.
+
+### OpenJev only
+
+Run the standalone service in `backend/jev_server.py` with the model and tokenizer setup described under [OpenJev setup](#1-openjev). It exposes a deliberately fixed question contract; send the supplied `QUESTIONS` rather than inventing new questions. A caller can consume only the decision it needs:
+
+```python
+import httpx
+from backend.core import QUESTIONS
+
+response = httpx.post(
+  "http://127.0.0.1:8022/v1/systemone",
+  json={"state": "Please explain the upload timeout.", "questions": QUESTIONS},
+  timeout=30,
+)
+response.raise_for_status()
+answers = response.json()["answers"]
+intent_scores = answers["intent"]["probabilities"]
+```
+
+`intent_scores` is a distribution over OpenJev's fixed labels, not generated text. The service also returns the demo's fixed memory-reference, multiple-task, and memory-value assessments. These scores are model outputs, not calibrated confidence. If your project needs a different decision schema, this checkpoint/service is not an arbitrary classifier; choose a compatible decision model or retain the model's supported questions.
+
+### LangExtract only
+
+Call LangExtract directly with your own source, extraction instructions, examples, and supported model provider. To reuse this repository's OpenAI-compatible adapter, copy `backend/openai_endpoint.py` into your backend and install `langextract[openai]` plus `httpx`:
+
+```python
+import os
+import langextract as lx
+from openai_endpoint import OpenAIEndpointModel
+
+model = OpenAIEndpointModel(
+  base_url=os.environ["OPENAI_BASE_URL"],
+  model_id=os.environ["EXTRACTION_MODEL"],
+  api_key=os.environ["OPENAI_API_KEY"],
+)
+document = lx.extract(
+  text_or_documents="The Atlas uploader times out after 30 seconds.",
+  prompt_description="Extract exact spans describing the system, issue, and constraint.",
+  examples=[lx.data.ExampleData(
+    text="The Cedar service retries three times.",
+    extractions=[
+      lx.data.Extraction(
+        extraction_class="system",
+        extraction_text="The Cedar service",
+      ),
+      lx.data.Extraction(
+        extraction_class="constraint",
+        extraction_text="retries three times",
+      ),
+    ],
+  )],
+  model=model,
+  show_progress=False,
+)
+for item in document.extractions:
+  print(item.extraction_class, item.extraction_text)
+```
+
+The adapter expects an OpenAI-compatible Chat Completions endpoint and requires a server-side key. Or omit the copied adapter and use any provider supported by LangExtract. For this demo's prompt, example, and grounding policy, see `backend/extract.py`; grounding is a separate validation step, shown below.
+
+### Source-grounded spans or UI only
+
+`backend/core.py` contains small Python helpers. `grounded_spans(source, extractions)` rejects unknown classes, invalid offsets, and text that does not exactly match the source; accepted offsets are converted to UTF-16 for browser use. `chunks`, `envelope`, and `aggregate` implement this demo's Jev request preparation and score policy. They are plain functions, not a published package API.
+
+For a React or browser UI, reuse `src/evidence.mjs`'s `segments(source, spans)` to split the original string into unmarked text and valid highlighted spans:
+
+```js
+import {segments} from "./evidence.mjs";
+
+const parts = segments(source, spans);
+```
+
+The span offsets must be UTF-16 code-unit offsets, and each span's `value` must exactly equal the corresponding source slice. Render `kind` segments with your own UI; the helper does not include this dashboard's styles or React components.
+
+### Reuse Boundaries
+
+There is no separately versioned SDK or stable import contract yet. The examples show the intended integration points; when copying files, copy only the relevant module and its dependencies, then add your own tests and adapt the boundaries to your application's error handling, privacy rules, and deployment model. Before redistributing this repository's code, select a project license; upstream model and library licenses do not automatically license this application code.
 
 ## Quick start
 
@@ -171,15 +265,17 @@ gitleaks dir . --redact
 
 Tests exercise real HTTP validation with mocked inference, partial failures, error privacy, concurrency, Unicode span grounding, and score aggregation. Model-quality evaluation is separate. A live smoke run should use a synthetic prompt and require both stages complete; inspect returned model IDs and actual spans.
 
-## Sharing and attribution
+## Further Reading, Attribution, and Licensing
 
 This directory is intended to become a fresh standalone repository. Share only this project's source, not unrelated development files or history. Exclude ignored environments, model files, screenshots, and local artifacts. Select a project license before public release; none is presumed here. No repository has been created or published by setup.
 
 Run `.venv/bin/python scripts/package.py` to produce `artifacts/request-intelligence-lab-source.zip` from an explicit source-file allowlist. This intentionally excludes the parent workspace, runtime configuration, virtual environments, dependencies, and model weights. Choose the application license before public release and add it to the packaging allowlist.
 
-- [OpenJev model card](https://huggingface.co/com-kotobalabs/open-jev-deberta-v3-large): independent typed-decision reproduction; model card declares Apache-2.0. Not affiliated with TypeSafe AI.
+- [TypeSafe AI introduction](https://docs.typesafe.ai/introduction): background on the decision-model approach that inspired this demonstration. The OpenJev implementation referenced here is an independent reproduction and is not affiliated with TypeSafe AI.
+- [OpenJev on Hugging Face](https://huggingface.co/com-kotobalabs/open-jev-deberta-v3-large): model card, weights, and model-specific usage/licensing details for the checkpoint used by the demo.
 - [typed-decisions inference implementation](https://github.com/kotoba-lang/typed-decisions): Apache-2.0 metadata; installed separately, not vendored.
-- [LangExtract](https://github.com/google/langextract): Apache-2.0; installed separately.
+- [LangExtract documentation and source](https://github.com/google/langextract): structured extraction, source grounding, visualization, installation, and provider guidance; installed separately under Apache-2.0.
+- [Ollama](https://ollama.com/): optional local model hosting for the Ollama extraction provider; Ollama and the selected model are installed separately.
 - React (MIT), Vite (MIT), FastAPI (MIT), Uvicorn (BSD-3-Clause), and their dependencies retain their respective licenses. Model licenses are separate from this application; verify the selected extraction model's terms before redistribution.
 
 No prompts, labels, databases, model weights, or deployment-specific configuration are included in the example source.
